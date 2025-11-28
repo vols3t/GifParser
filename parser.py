@@ -1,4 +1,5 @@
 
+
 with open("pepapig-sigma.gif","rb") as f:
     data = f.read()
     f.close()
