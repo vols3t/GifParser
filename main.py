@@ -2,7 +2,8 @@ import sys
 import time
 import os
 from rich.console import Console
-from parsbyte import print_hex_info
+from rich.text import Text
+from rich.style import Style
 
 def clear_screen():
     print("\033[H", end="")
@@ -117,44 +118,80 @@ def lzw_decode(min_code_size, data):
 
 def render_canvas_to_console(console, canvas, width, height):
     term_width = console.width
+    term_height = console.height
+    
     scale_x = 1
     scale_y = 1
-    
-    if term_width > 0 and width * 2 > term_width:
-        scale_x = (width * 2) // term_width + 1
-    
-    if height > 40:
-        scale_y = height // 40 + 1
+    upscale_factor = 1
 
-    grey_1 = (120, 120, 120) 
-    grey_2 = (180, 180, 180)
+    if width < 20 and height < 20:
+        target_w = 40
+        upscale_factor = target_w // (width * 2) 
+        if upscale_factor < 1: upscale_factor = 1
 
-    output_lines = []
-    
-    for y in range(0, height, scale_y):
-        line_str = ""
-        for x in range(0, width, scale_x):
-            pixel_val = canvas[y * width + x]
-            
-            if pixel_val is None:
-                if ((x // scale_x) + (y // scale_y)) % 2 == 0:
-                    r, g, b = grey_1
-                else:
-                    r, g, b = grey_2
-                line_str += f"[on rgb({r},{g},{b})]  [/]"
-            else:
-                r, g, b = pixel_val
-                line_str += f"[on rgb({r},{g},{b})]  [/]"
+    elif (width * 2) > term_width or height > (term_height - 3):
+        ratio_w = (width * 2) / term_width
+        ratio_h = height / (term_height - 3)
+        max_ratio = max(ratio_w, ratio_h)
+        if max_ratio > 1:
+            scale_x = int(max_ratio) + 1
+            scale_y = int(max_ratio) + 1
+
+    grey_1 = Style(bgcolor="rgb(120,120,120)")
+    grey_2 = Style(bgcolor="rgb(180,180,180)")
+
+    print("\033[H", end="")
+
+    if upscale_factor > 1:
+        pixel_str = "  " * upscale_factor
+        
+        for y in range(height):
+            line = Text()
+            for x in range(width):
+                pixel_val = canvas[y * width + x]
                 
-        output_lines.append(line_str)
-    
-    clear_screen()
-    for line in output_lines:
-        console.print(line)
+                if pixel_val is None:
+                    if (x + y) % 2 == 0: style = grey_1
+                    else: style = grey_2
+                else:
+                    r, g, b = pixel_val
+                    style = Style(bgcolor=f"rgb({r},{g},{b})")
+                
+                line.append(pixel_str, style=style)
+            
+            for _ in range(upscale_factor):
+                console.print(line, overflow="crop", no_wrap=True)
+
+    else:
+        if scale_x < 1: scale_x = 1
+        if scale_y < 1: scale_y = 1
+        
+        pixel_str = "  "
+        
+        for y in range(0, height, scale_y):
+            line = Text()
+            for x in range(0, width, scale_x):
+                if y >= height or x >= width: continue
+                
+                pixel_val = canvas[y * width + x]
+                
+                if pixel_val is None:
+                    grid_x = x // scale_x
+                    grid_y = y // scale_y
+                    if (grid_x + grid_y) % 2 == 0: style = grey_1
+                    else: style = grey_2
+                else:
+                    r, g, b = pixel_val
+                    style = Style(bgcolor=f"rgb({r},{g},{b})")
+
+                line.append(pixel_str, style=style)
+            
+            console.print(line, overflow="crop", no_wrap=True)
+
 
 def main():
     if len(sys.argv) < 2:
-        print("Что бы использовать: python test.py <file.gif>")
+        print("Что бы использовать: python main.py <file.gif>")
         return
     else:
         file_name = sys.argv[1]
@@ -169,7 +206,6 @@ def main():
     console = Console()
     
     canvas_w, canvas_h, packed, bg_idx = print_header_info(data)
-    print_hex_info(file_name)
     if canvas_w == 0 or canvas_h == 0:
         return
     
@@ -191,8 +227,12 @@ def main():
 
     input("Нажми Enter для старта анимации")
     os.system('cls' if os.name == 'nt' else 'clear')
+
+    bg_color = None
+    if bg_idx < len(global_palette):
+        bg_color = global_palette[bg_idx]
     
-    canvas = [None] * (canvas_w * canvas_h)
+    canvas = [bg_color] * (canvas_w * canvas_h)
     
     prev_canvas_buffer = list(canvas)
 
@@ -304,7 +344,7 @@ def main():
                                     if color_idx < len(current_palette):
                                         canvas[y * canvas_w + x] = current_palette[color_idx]
                                     else:
-                                        canvas[y * canvas_w + x] = None
+                                        canvas[y * canvas_w + x] = (0,0,0)
 
                 render_canvas_to_console(console, canvas, canvas_w, canvas_h)
                 
@@ -314,7 +354,7 @@ def main():
                     for y in range(img_top, img_top + img_h):
                         for x in range(img_left, img_left + img_w):
                             if x < canvas_w and y < canvas_h:
-                                canvas[y * canvas_w + x] = None
+                                canvas[y * canvas_w + x] = bg_color
                                 
                 elif disposal_method == 3:
                     canvas = list(prev_canvas_buffer)
