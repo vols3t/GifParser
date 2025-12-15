@@ -2,6 +2,7 @@ import sys
 import time
 import os
 from rich.console import Console
+from parsbyte import print_hex_info
 
 def clear_screen():
     print("\033[H", end="")
@@ -168,6 +169,7 @@ def main():
     console = Console()
     
     canvas_w, canvas_h, packed, bg_idx = print_header_info(data)
+    print_hex_info(file_name)
     if canvas_w == 0 or canvas_h == 0:
         return
     
