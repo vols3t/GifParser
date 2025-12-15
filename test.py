@@ -7,14 +7,10 @@ from parsbyte import print_hex_info
 def clear_screen():
     print("\033[H", end="")
 
-def print_header_info(data):
-
+def read_header_info(data: bytes):
     if len(data) < 13:
-        print("Ошибка: заголовок не найдет, мб файл короткий или не гифка")
-        return 0, 0, 0, 0
+        return {"error": "Ошибка: заголовок не найдет, мб файл короткий или не гифка"}
     
-    print("инфо о гифке")
-
     signature = data[:3].decode('ascii', errors='ignore')
     version = data[3:6].decode('ascii', errors='ignore')
     
@@ -27,18 +23,32 @@ def print_header_info(data):
     color_res = ((packed & 0b01110000) >> 4) + 1
     size_exp = (packed & 0b00000111)
 
-    print(f"Тип: {signature}")
-    print(f"Версия: {version}")
-    print(f"Размер холста: {width}x{height} px")
-    print(f"Глобальная палитра: {'Да' if global_palette_flag else 'Нет'}")
+    return {
+        "signature": signature,
+        "version": version,
+        "width": width,
+        "height": height,
+        "packed": packed,
+        "bg_color_index": bg_color_index,
+        "global_palette_flag": global_palette_flag,
+        "palette_size": 2 ** (size_exp + 1) if global_palette_flag else 0,
+        "color_res_bits": color_res,
+        "size_exp": size_exp,
+    }
 
-    if global_palette_flag:
-        print(f"Размер г. палитры: {2**(size_exp+1)} цветов")
-
-    print(f"Индекс цвета фона: {bg_color_index}")
-    print(f"Разрешение цвета: {color_res} бит")
-    
-    return width, height, packed, bg_color_index
+def print_header_info_dict(header_info: dict):
+    if "error" in header_info:
+        print(header_info["error"])
+        return
+    print("инфо о гифке")
+    print(f"Тип: {header_info['signature']}")
+    print(f"Версия: {header_info['version']}")
+    print(f"Размер холста: {header_info['width']}x{header_info['height']} px")
+    print(f"Глобальная палитра: {'Да' if header_info['global_palette_flag'] else 'Нет'}")
+    if header_info['global_palette_flag']:
+        print(f"Размер г. палитры: {header_info['palette_size']} цветов")
+    print(f"Индекс цвета фона: {header_info['bg_color_index']}")
+    print(f"Разрешение цвета: {header_info['color_res_bits']} бит")
 
 def lzw_decode(min_code_size, data):
     if not data:
@@ -167,9 +177,16 @@ def main():
         data = f.read()
 
     console = Console()
-    
-    canvas_w, canvas_h, packed, bg_idx = print_header_info(data)
     print_hex_info(file_name)
+    header_info = read_header_info(data)
+    print_header_info_dict(header_info)
+    if "error" in header_info:
+        return
+
+    canvas_w = header_info["width"]
+    canvas_h = header_info["height"]
+    packed = header_info["packed"]
+
     if canvas_w == 0 or canvas_h == 0:
         return
     
